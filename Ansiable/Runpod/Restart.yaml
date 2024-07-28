@@ -1,0 +1,10 @@
+---
+- name: Restart runpod service
+  hosts: "*"
+  become: yes
+
+  tasks:
+    - name: Restart runpod service
+      ansible.builtin.systemd:
+        name: runpod
+        state: restarted

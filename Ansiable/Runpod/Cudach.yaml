@@ -1,0 +1,57 @@
+---
+- name: Setup NVIDIA Container Toolkit and Docker configuration
+  hosts: all
+  become: yes
+  any_errors_fatal: false
+  tasks:
+    - name: Update apt package index
+      apt:
+        update_cache: yes
+
+    - name: Install NVIDIA Container Toolkit
+      apt:
+        name: nvidia-container-toolkit
+        state: present
+
+    - name: Run nvidia-ctk to configure the runtime
+      command: nvidia-ctk runtime configure --runtime=docker
+      ignore_errors: yes  # In case nvidia-ctk does not exist
+
+    - name: Ensure Docker daemon configuration directory exists
+      file:
+        path: /etc/docker
+        state: directory
+
+    - name: Backup existing /etc/docker/daemon.json if it exists
+      copy:
+        src: /etc/docker/daemon.json
+        dest: /etc/docker/daemon.json.bak
+        backup: yes
+      when: lookup('file', '/etc/docker/daemon.json', errors='ignore') is not none
+
+    - name: Create or update /etc/docker/daemon.json
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "runtimes": {
+              "nvidia": {
+                "path": "nvidia-container-runtime",
+                "runtimeArgs": []
+              }
+            },
+            "log-driver": "local",
+            "userns-remap": "default",
+            "live-restore": true
+          }
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    - name: Restart RunPod service (if applicable)
+      service:
+        name: runpod
+        state: restarted
+      ignore_errors: yes  # Only if you have a RunPod service, otherwise ignore

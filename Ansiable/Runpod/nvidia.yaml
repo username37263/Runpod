@@ -1,0 +1,42 @@
+---
+- name: Install NVIDIA Drivers
+  hosts: "*"
+  become: yes
+  tasks:
+    - name: Update the package list
+      apt:
+        update_cache: yes
+
+    - name: Install ubuntu-drivers-common
+      apt:
+        name: ubuntu-drivers-common
+        state: present
+
+    - name: Automatically install the recommended NVIDIA drivers
+      command: ubuntu-drivers autoinstall
+      register: nvidia_install
+      ignore_errors: yes
+
+    - name: Reboot the system to apply changes
+      reboot:
+        msg: "Reboot initiated by Ansible for NVIDIA driver installation"
+        pre_reboot_delay: 10
+      when: nvidia_install.changed
+
+    - name: Verify NVIDIA driver installation
+      command: nvidia-smi
+      register: nvidia_smi_output
+      retries: 5
+      delay: 10
+      until: nvidia_smi_output.rc == 0
+      ignore_errors: yes
+
+    - name: Debug nvidia-smi output
+      debug:
+        msg: "{{ nvidia_smi_output.stdout }}"
+      when: nvidia_smi_output.rc == 0
+
+    - name: Fail if NVIDIA drivers were not installed correctly
+      fail:
+        msg: "NVIDIA driver installation failed."
+      when: nvidia_smi_output.rc != 0

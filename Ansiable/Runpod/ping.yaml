@@ -1,0 +1,44 @@
+---
+- name: Run ping test on hosts for 5 hours
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create ping test script
+      copy:
+        content: |
+          #!/bin/bash
+          TARGET="8.8.8.8"
+          LOG_DIR="/tmp/ping_test_results"
+          mkdir -p $LOG_DIR
+          END_TIME=$((SECONDS + 5 * 3600))
+
+          while [ $SECONDS -lt $END_TIME ]; do
+            ping -c 1 $TARGET &>> $LOG_DIR/$TARGET.log
+            sleep 1
+          done
+
+          # Summarize results
+          echo "Results for $TARGET" > $LOG_DIR/summary.log
+          grep 'packets transmitted' $LOG_DIR/$TARGET.log >> $LOG_DIR/summary.log
+        dest: /tmp/ping_test.sh
+        mode: '0755'
+
+    - name: Run ping test script
+      async: 18000
+      poll: 0
+      shell: /tmp/ping_test.sh
+      register: ping_test_job
+
+    - name: Wait for ping test completion
+      async_status:
+        jid: "{{ ping_test_job.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 300
+      delay: 60
+
+    - name: Fetch ping test results
+      fetch:
+        src: /tmp/ping_test_results/summary.log
+        dest: ./ping_test_results/{{ inventory_hostname }}_summary.log
+        flat: yes
